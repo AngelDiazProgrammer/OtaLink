@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Contratos públicos de la API (entradas y salidas). No expone entidades de dominio. -->
+</Project>

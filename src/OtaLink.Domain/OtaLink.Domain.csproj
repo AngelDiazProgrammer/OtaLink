@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Reglas de negocio puras. NO depende de ningún otro proyecto ni de EF Core / ASP.NET. -->
+</Project>

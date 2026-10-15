@@ -1,0 +1,3 @@
+[*.cs]
+# En pruebas se usan nombres descriptivos con guion bajo (Metodo_hace_algo_cuando_condicion).
+dotnet_diagnostic.CA1707.severity = none

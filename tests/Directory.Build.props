@@ -1,0 +1,9 @@
+<Project>
+  <!-- Reutiliza las reglas comunes de la raíz y añade las específicas de pruebas. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <!-- xUnit v3 ejecuta sobre Microsoft Testing Platform: necesario para "dotnet test" en .NET 10. -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+</Project>

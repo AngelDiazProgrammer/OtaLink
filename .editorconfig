@@ -1,0 +1,29 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,csproj,props,targets,razor,html,css,js}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# Los scripts y la configuración del servidor Linux deben usar saltos de línea LF.
+[*.{sh,conf,service,timer,sql}]
+end_of_line = lf
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_style_qualification_for_field = false:warning
+csharp_style_var_for_built_in_types = true:suggestion
+dotnet_sort_system_directives_first = true
+
+# El código de ejemplo de la plantilla de Blazor no se analiza con reglas estrictas.
+[src/OtaLink.Web/**.cs]
+dotnet_diagnostic.CA1812.severity = suggestion

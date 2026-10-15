@@ -15,7 +15,7 @@ Todo corre, por ahora, en un servidor Ubuntu virtualizado en el propio computado
 | Fase | Documento | Estado |
 |---|---|---|
 | 1 | [Configuración del entorno](fase-01-configuracion-del-entorno.md) | Completada (con una observación abierta, ver el documento) |
-| 2 | Solución .NET por capas y primer flujo vertical (registro, perfil) | Pendiente |
+| 2 | [Solución .NET por capas](fase-02-solucion-dotnet.md) y primer flujo vertical (registro, perfil) | En curso (etapa 1: esqueleto, hecha) |
 | 3 | MVP: identidad, descubrimiento, citas, chat, comunidad | Pendiente |
 | 4 | Acceso desde Internet, dominio y HTTPS | Pendiente |
 | 5 | Seguridad, publicación y mantenimiento | Pendiente |

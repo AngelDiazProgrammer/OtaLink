@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Referencian los ensamblados que se inspeccionan, sin añadir reglas de negocio. -->
+    <ProjectReference Include="..\..\src\OtaLink.Domain\OtaLink.Domain.csproj" />
+    <ProjectReference Include="..\..\src\OtaLink.Application\OtaLink.Application.csproj" />
+    <ProjectReference Include="..\..\src\OtaLink.Infrastructure\OtaLink.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\OtaLink.Contracts\OtaLink.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
