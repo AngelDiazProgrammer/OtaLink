@@ -38,14 +38,16 @@ Todas llevan `SECURITY DEFINER` con `search_path` fijo y nombres calificados con
 
 | # | Archivo | Contenido | Estado |
 |---|---|---|---|
-| 0001 | `0001_esquemas_y_permisos.sql` | Los 5 esquemas y el modelo de permisos | Pendiente |
-| 0002 | `0002_configuracion.sql` | `configuracion.parametros` (reglas con números), `tgf_actualizar_fecha`, `fn_parametro_entero` | Pendiente |
-| 0003 | `0003_log_auditoria.sql` | `log.auditoria` y el trigger genérico `tgf_auditar` | Pendiente |
-| 0004 | `0004_smart_catalogos.sql` | `smart.ciudades`, `smart.intereses` y sus funciones de lectura | Pendiente |
-| 0005 | `0005_smart_datos_intereses_otaku.sql` | 172 intereses en 9 categorías (repetible: no duplica) | Pendiente |
-| 0006 | `0006_seguridad_usuarios.sql` | `seguridad.usuarios` y sus triggers | Pendiente |
-| 0007 | `0007_seguridad_usuarios_rutinas.sql` | `sp_usuario_crear/actualizar/eliminar` y `fn_usuario_por_*` | Pendiente |
-| 0008 | `0008_proceso_perfiles.sql` | `proceso.perfiles`, `proceso.perfiles_intereses` y sus triggers | Pendiente |
-| 0009 | `0009_proceso_perfiles_rutinas.sql` | Reglas de negocio de perfiles: `sp_perfil_*` y `fn_perfil_*` | Pendiente |
+| 0001 | `0001_esquemas_y_permisos.sql` | Los 5 esquemas y el modelo de permisos | Ejecutado |
+| 0002 | `0002_configuracion.sql` | `configuracion.parametros` (reglas con números), `tgf_actualizar_fecha`, `fn_parametro_entero` | Ejecutado |
+| 0003 | `0003_log_auditoria.sql` | `log.auditoria` y el trigger genérico `tgf_auditar` | Ejecutado |
+| 0004 | `0004_smart_catalogos.sql` | `smart.ciudades`, `smart.intereses` y sus funciones de lectura | Ejecutado |
+| 0005 | `0005_smart_datos_intereses_otaku.sql` | 172 intereses en 9 categorías (repetible: no duplica) | Ejecutado |
+| 0006 | `0006_seguridad_usuarios.sql` | `seguridad.usuarios` y sus triggers | Ejecutado |
+| 0007 | `0007_seguridad_usuarios_rutinas.sql` | `sp_usuario_crear/actualizar/eliminar` y `fn_usuario_por_*` | Ejecutado |
+| 0008 | `0008_proceso_perfiles.sql` | `proceso.perfiles`, `proceso.perfiles_intereses` y sus triggers | Ejecutado |
+| 0009 | `0009_proceso_perfiles_rutinas.sql` | Reglas de negocio de perfiles: `sp_perfil_*` y `fn_perfil_*` | Ejecutado |
 
 Dependencias: `0003` y `0004` necesitan `0001`; `0006` necesita `0002` y `0003`; `0008` necesita `0004` y `0006`; `0009` necesita `0002`, `0007` y `0008`.
+
+Todos los scripts se ejecutaron el 2026-10-15 sin errores y se verificaron con pruebas automáticas contra la base real (ver `tests/OtaLink.IntegrationTests/BaseReal`).

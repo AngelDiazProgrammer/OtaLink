@@ -2,8 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using OtaLink.Application.Ciudades;
+using OtaLink.Application.Intereses;
+using OtaLink.Application.Perfiles;
 using OtaLink.Domain.Datos;
 using OtaLink.Infrastructure.Persistence;
+using OtaLink.Infrastructure.Servicios;
 
 namespace OtaLink.Infrastructure;
 
@@ -38,8 +42,11 @@ public static class DependencyInjection
         // El archivo que llama a los procedimientos y funciones. Scoped: comparte el DbContext de la petición.
         services.AddScoped<OtaLinkRutinas>();
 
-        // Servicios de cada módulo: uno por funcionalidad, independientes entre sí.
-        // (Se registran aquí a medida que se construyen.)
+        // Servicios de cada módulo: uno por funcionalidad, independientes entre sí. Scoped: comparten
+        // el DbContext de la petición en curso. Los controladores solo ven las interfaces.
+        services.AddScoped<ICiudadService, CiudadService>();
+        services.AddScoped<IInteresService, InteresService>();
+        services.AddScoped<IPerfilService, PerfilService>();
 
         return services;
     }

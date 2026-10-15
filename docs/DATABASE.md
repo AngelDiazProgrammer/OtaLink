@@ -45,7 +45,6 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 \
 
 ## Pendiente
 
-- Ejecutar los scripts 0001 a 0009 (ver el README de `deploy/postgres/migrations/`).
 - Base de producción separada de `otalink_dev`.
 
 ## Desarrollo desde Windows (2026-10-15)
@@ -75,7 +74,13 @@ Toda la estructura y la lógica transaccional están en scripts SQL numerados, e
 
 ## Estado
 
-Los scripts 0001 a 0009 están escritos y a la espera de revisión y ejecución. Ver la tabla de orden en el README de la carpeta.
+Scripts 0001 a 0009 **ejecutados** (2026-10-15) y verificados con pruebas automáticas contra la base real: esquemas y permisos, parámetros, auditoría, catálogos (172 intereses, 1 ciudad), usuarios y perfiles.
+
+Las pruebas crean usuarios temporales (`prueba-…@otalink.test`) y los borran al terminar; su auditoría queda en `log.auditoria`. Para comprobar que no quedan restos, como `otalink_migrator` en DBeaver:
+
+```sql
+SELECT count(*) FROM seguridad.usuarios WHERE correo LIKE 'prueba-%@otalink.test';   -- 0
+```
 
 ## Cómo llama el código a la base
 

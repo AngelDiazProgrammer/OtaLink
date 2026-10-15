@@ -112,7 +112,7 @@ public sealed class OtaLinkRutinas(OtaLinkDbContext db)
     public Task<ResultadoRutina> CrearPerfilAsync(
         Guid usuarioId,
         string? nombrePublico,
-        DateOnly fechaNacimiento,
+        DateOnly? fechaNacimiento,
         string? biografia,
         string? ciudadCodigo,
         CancellationToken cancellationToken) =>
@@ -121,7 +121,7 @@ public sealed class OtaLinkRutinas(OtaLinkDbContext db)
             [
                 Uuid(usuarioId),
                 Texto(nombrePublico),
-                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Date, Value = fechaNacimiento },
+                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Date, Value = (object?)fechaNacimiento ?? DBNull.Value },
                 Texto(biografia),
                 Texto(ciudadCodigo),
             ],

@@ -1,7 +1,7 @@
 # Fase 2: solución .NET por capas
 
 > Corresponde a la "Fase 5" del plan original (crear la solución .NET).
-> Estado: **en curso**. Etapa 1 (esqueleto), etapa 2 (configuración, registros y conexión a la base real) y **etapa 3: reorganización de la arquitectura** (la vigente).
+> Estado: **en curso**. Etapa 1 (esqueleto), etapa 2 (configuración, registros y conexión a la base real), **etapa 3: reorganización de la arquitectura** (la vigente) y **etapa 4: servicios, controladores y pruebas contra la base real**.
 > Fecha: 15 de octubre de 2026.
 >
 > ⚠️ **La etapa 3 reemplaza parte del diseño de las etapas 1 y 2** (repositorios, `Contracts`, EF Core con migraciones, Minimal APIs). Esas secciones se conservan como historia y están marcadas **(superado)**. La arquitectura vigente está en [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) y en la sección 2.8.
@@ -206,7 +206,61 @@ Procedimiento (todo en WINDOWS, PowerShell):
 
 ---
 
+### 2.9 Etapa 4: servicios, controladores y pruebas contra la base real
+
+**Objetivo:** construir el primer flujo completo con la arquitectura definitiva (catálogos y perfil) y **demostrar con pruebas** que los scripts SQL y las reglas de la base funcionan.
+
+**Qué se construyó** (todo sigue el flujo controlador → interfaz → servicio):
+
+| Módulo | Interfaz (`Application`) | Servicio (`Infrastructure/Servicios`) | Controlador (`Api/Controllers`) |
+|---|---|---|---|
+| Ciudades | `ICiudadService` | `CiudadService` | `CiudadesController` |
+| Intereses | `IInteresService` | `InteresService` | `InteresesController` |
+| Perfiles | `IPerfilService` | `PerfilService` | `PerfilesController` |
+
+- **Los servicios no tienen reglas de negocio ni SQL**: llaman a `OtaLinkRutinas`, que invoca el procedimiento o la función de la base, y traducen la respuesta. `ErroresRutina` convierte el código de error del procedimiento (`perfil.menor_de_edad`...) en un `AppError` con su tipo (400, 404 o 409).
+- **`OtaLinkControllerBase`** convierte un `Result` en respuesta HTTP: éxito → 200 (o 201); error → `ProblemDetails` con el **código estable** en la extensión `codigo`.
+- **La persona se identifica siempre por su sesión.** Ningún endpoint recibe un identificador de usuario: `/api/perfiles/me` toma el identificador del token. Así no se puede leer ni modificar el perfil de otra persona manipulando identificadores. Hay una prueba que lo comprueba, incluido el intento de pedir `/api/perfiles/{id-de-otra-persona}` (404).
+- Los controladores exigen sesión (`[Authorize]`). El inicio de sesión llega con el módulo de autenticación; en las pruebas se sustituye por una autenticación de prueba que solo existe en el proyecto de pruebas.
+- Contrato completo en [docs/API-SPEC.md](../docs/API-SPEC.md).
+
+**Pruebas contra la base real de la VM** (`tests/OtaLink.IntegrationTests/BaseReal`):
+
+| Qué | Qué demuestra |
+|---|---|
+| `UsuarioRutinasDbTests` | Los scripts 0006 y 0007: crear, buscar, actualizar con **control de concurrencia**, eliminar, y códigos de error de duplicados |
+| `CatalogosYPermisosDbTests` | 172 intereses en 9 categorías, Bogotá como única ciudad, y el **modelo de permisos**: la aplicación **no puede leer ni escribir en ninguna tabla** y no ve los esquemas `log` ni `configuracion` (error 42501 de PostgreSQL) |
+| `PerfilServiceDbTests` | Las **reglas de negocio de la base**, llamando al servicio sin pasar por los DTOs (lo que haría un cliente malicioso): menor de edad, fechas imposibles, nombres y biografías inválidos, ciudad, intereses (20 distintos, repetidos, inexistentes, atomicidad), modos independientes, borrado en cascada |
+| `PerfilesApiDbTests` | Los controladores de punta a punta: 401 sin sesión, 201/200/400/404/409 y el aislamiento entre personas |
+
+Dos pruebas merecen mención:
+
+- **Paridad de la regla de edad:** para los días alrededor de los 18 años, la regla en C# (la validación primaria de los DTOs) y la del procedimiento SQL deben dar el mismo resultado. Si alguien cambia una y no la otra, falla.
+- **Dos peticiones simultáneas de crear perfil:** solo una gana y la otra recibe `409`, sin errores 500. La transaccionalidad es de la base de datos.
+
+**Cómo funcionan las pruebas con la base real:**
+
+- Usan la **base de desarrollo** (`otalink_dev`) por el túnel SSH, con la cadena de conexión de User Secrets. **Necesitan el túnel abierto** (`deploy/scripts/dev-db-tunnel.ps1`).
+- Si no hay conexión, las pruebas se **omiten con el motivo** en lugar de fallar.
+- Cada prueba crea un usuario temporal (`prueba-…@otalink.test`) y lo **borra al terminar** (su perfil se borra en cascada). La auditoría de esos cambios queda en `log.auditoria`.
+
+**Resultado verificado:** **134 pruebas correctas** en toda la solución (84 de integración, de las cuales unas 60 usan la base real), 0 omitidas, 0 advertencias de compilación.
+
+**Qué demuestra esta etapa:** los nueve scripts, escritos sin poder ejecutarlos, **funcionaron a la primera** al ejecutarlos el desarrollador; y cada afirmación de seguridad del diseño (la app no toca tablas, las reglas viven en la base, la persona se identifica por la sesión) tiene una prueba que falla si deja de cumplirse.
+
+**Lecciones:**
+
+| Síntoma | Causa | Lección |
+|---|---|---|
+| El analizador de EF (EF1002) rechazó un `SqlQueryRaw` con interpolación | Armar SQL con texto interpolado es un riesgo de inyección, aunque aquí fuera un nombre fijo de prueba | Pasar las consultas completas como constantes, sin interpolar |
+| `ToTable`, `FromSql` y `SqlQuery` "no existían" en `Domain` | Pertenecen a `Microsoft.EntityFrameworkCore.Relational`, y solo estaba el núcleo de EF | Añadir el paquete relacional |
+| `CA1725`: el nombre del parámetro de `OnModelCreating` | Cada clase base usa un nombre distinto (`modelBuilder` en `DbContext`, `builder` en `IdentityDbContext`) | Seguir el nombre de la base que se hereda |
+| Un comando de shell con un bloque muy largo falló por las comillas | Los bloques enormes con comillas mezcladas se rompen | Escribir los archivos con la herramienta de archivos, no con un solo comando |
+
+---
+
 ## 3. Decisión: modo de renderizado de Blazor
+
 
 **Interactive Server global + Static SSR únicamente en las páginas de autenticación.**
 
@@ -326,11 +380,9 @@ Lección general: cuando "nada funciona", ejecutar la pieza más pequeña por se
 
 **Pendiente en esta fase:**
 
-- [ ] Revisar y ejecutar los scripts SQL 0001 a 0009 en la base (los ejecuta el desarrollador)
-- [ ] Servicios (`PerfilService`, `InteresService`, `CiudadService`) y sus controladores
-- [ ] Autenticación: `UserManager`/`SignInManager` con almacenes propios que llaman a los procedimientos de `seguridad` (envío de correo real pendiente de elegir proveedor)
-- [ ] Pruebas contra la base real de la VM (una base de pruebas aparte)
+- [ ] **Autenticación:** `UserManager`/`SignInManager` con almacenes propios que llaman a los procedimientos de `seguridad` (registro, confirmación de correo, inicio de sesión, refresco, recuperación de contraseña). El envío real de correo queda pendiente de elegir proveedor
 - [ ] Páginas de Blazor (`.razor` + `.razor.cs`) para registro, perfil e intereses
 - [ ] Servicios `systemd` `otalink-api` y `otalink-web` y primer despliegue real en la VM
 - [ ] Replicar en la Web la política de cabeceras de proxy
 - [ ] Instalar y configurar MudBlazor en la Web
+- [ ] Base de pruebas separada de `otalink_dev` (hoy las pruebas usan la de desarrollo y limpian sus datos)

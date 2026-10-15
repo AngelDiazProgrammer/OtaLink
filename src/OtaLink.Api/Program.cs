@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
 using OtaLink.Api.Errors;
 using OtaLink.Api.Health;
@@ -21,10 +23,16 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Controladores de API (solo JSON). Sin vistas: no se usa AddControllersWithViews.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
+
+// Autenticación por token (bearer). Los endpoints de inicio de sesión llegan con el módulo de autenticación;
+// mientras tanto todo lo protegido con [Authorize] responde 401.
+builder.Services.AddAuthentication(IdentityConstants.BearerScheme).AddBearerToken(IdentityConstants.BearerScheme);
+builder.Services.AddAuthorization();
 
 // /health       -> la aplicación está viva (no consulta nada externo).
 // /health/ready -> además, la base de datos responde.
@@ -47,6 +55,8 @@ app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
 app.UseStatusCodePages();
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
