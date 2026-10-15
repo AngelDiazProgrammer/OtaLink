@@ -2,13 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using OtaLink.Domain.Datos;
 using OtaLink.Infrastructure.Persistence;
 
 namespace OtaLink.Infrastructure;
 
 public static class DependencyInjection
 {
-    /// <summary>Registra la infraestructura (base de datos, repositorios, correo...).</summary>
+    /// <summary>Registra la infraestructura: conexión a la base de datos y los servicios de cada módulo.</summary>
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -28,18 +29,18 @@ public static class DependencyInjection
         services.AddDbContext<OtaLinkDbContext>((serviceProvider, options) =>
         {
             var database = serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
-            ConfigureNpgsql(options, database.ConnectionString);
+            options
+                .UseNpgsql(database.ConnectionString)
+                // Tablas y columnas en snake_case (nombre_publico, fecha_creacion...): coincide con la base.
+                .UseSnakeCaseNamingConvention();
         });
 
-        return services;
-    }
+        // El archivo que llama a los procedimientos y funciones. Scoped: comparte el DbContext de la petición.
+        services.AddScoped<OtaLinkRutinas>();
 
-    internal static void ConfigureNpgsql(DbContextOptionsBuilder options, string connectionString)
-    {
-        options
-            .UseNpgsql(connectionString, npgsql =>
-                npgsql.MigrationsHistoryTable("__ef_migrations_history"))
-            // Tablas y columnas en snake_case (usuarios, fecha_creacion...): más cómodo en SQL/DBeaver.
-            .UseSnakeCaseNamingConvention();
+        // Servicios de cada módulo: uno por funcionalidad, independientes entre sí.
+        // (Se registran aquí a medida que se construyen.)
+
+        return services;
     }
 }

@@ -5,10 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3.mtp-v2" />
-    <PackageReference Include="NSubstitute" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\OtaLink.Domain\OtaLink.Domain.csproj" />
+    <!-- Pruebas de la validación primaria (DTOs y reglas de Application). Sin base de datos. -->
     <ProjectReference Include="..\..\src\OtaLink.Application\OtaLink.Application.csproj" />
   </ItemGroup>
   <ItemGroup>

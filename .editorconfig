@@ -24,6 +24,10 @@ dotnet_style_qualification_for_field = false:warning
 csharp_style_var_for_built_in_types = true:suggestion
 dotnet_sort_system_directives_first = true
 
+# Las migraciones las genera EF Core: no se editan a mano ni se revisan por estilo.
+[src/OtaLink.Infrastructure/Persistence/Migrations/*.cs]
+generated_code = true
+
 # El código de ejemplo de la plantilla de Blazor no se analiza con reglas estrictas.
 [src/OtaLink.Web/**.cs]
 dotnet_diagnostic.CA1812.severity = suggestion

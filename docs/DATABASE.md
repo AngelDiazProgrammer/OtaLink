@@ -10,8 +10,8 @@ Escucha solo en `127.0.0.1:5432` (verificado con `ss -tln`). El puerto 5432 no s
 | Elemento | Detalle |
 |---|---|
 | Base | `otalink_dev` |
-| `otalink_migrator` | Dueño de la base y del esquema `public`. Aplica migraciones, manualmente y con revisión. |
-| `otalink_app` | La API en ejecución. Solo `SELECT/INSERT/UPDATE/DELETE` en tablas y `USAGE/SELECT` en secuencias. |
+| `otalink_migrator` | Dueño de la base y de todos los objetos. Ejecuta los scripts SQL, manualmente y tras revisarlos. |
+| `otalink_app` | La API en ejecución. **Sin permiso sobre ninguna tabla**: solo puede ejecutar los procedimientos y funciones de `proceso`, `seguridad` y `smart` (lo configura el script 0001). |
 | `postgres` | Superusuario. Solo administración local con `sudo -u postgres`. La aplicación nunca lo usa. |
 
 Script versionado: [deploy/postgres/01-create-database.sql](../deploy/postgres/01-create-database.sql).
@@ -23,7 +23,9 @@ No contiene contraseñas: las recibe como variables de `psql`.
 - Permisos `600`, propietario `root`. Fuera de Git.
 - Pendiente: incluirlas en el respaldo cifrado (ver BACKUP-RESTORE.md). La del migrador se rotó el 2026-10-15 por haberse mostrado en el chat.
 
-## Verificación de permisos (2026-10-15)
+## Verificación de permisos del modelo anterior (2026-10-15)
+
+Se hizo con el modelo inicial (permisos de `INSERT/SELECT` sobre tablas). El diseño definitivo es más estricto: la aplicación ya no toca tablas, solo rutinas. Se volverá a verificar al ejecutar los scripts.
 
 - `otalink_app` se autentica por `127.0.0.1`.
 - `otalink_app` no puede crear tablas (`permission denied for schema public`).
@@ -43,8 +45,7 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 \
 
 ## Pendiente
 
-- Modelo de datos (tablas) con las migraciones de EF Core.
-- Copias de seguridad y restauración probada.
+- Ejecutar los scripts 0001 a 0009 (ver el README de `deploy/postgres/migrations/`).
 - Base de producción separada de `otalink_dev`.
 
 ## Desarrollo desde Windows (2026-10-15)
@@ -54,6 +55,28 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 \
 - Scripts: `deploy/scripts/dev-db-tunnel.ps1` y `deploy/scripts/dev-set-db-secret.ps1` (este valida el formato de la contraseña).
 - Verificado: `GET /health/ready` → `200 Healthy`.
 
-## Cambios de esquema
+## Esquemas, tablas y rutinas (diseño definitivo, 2026-10-15)
 
-Cada migración de EF Core se entrega como un script SQL numerado en `deploy/postgres/migrations/` (ver su README). Se ejecutan a mano desde DBeaver como `otalink_migrator`. Convención de nombres: `snake_case`; historial en `__ef_migrations_history`.
+Toda la estructura y la lógica transaccional están en scripts SQL numerados, escritos a mano y revisados antes de ejecutarse: ver [deploy/postgres/migrations/README.md](../deploy/postgres/migrations/README.md).
+
+| Esquema | Tablas |
+|---|---|
+| `configuracion` | `parametros` |
+| `proceso` | `perfiles`, `perfiles_intereses` |
+| `log` | `auditoria` |
+| `seguridad` | `usuarios` |
+| `smart` (tablas fuertes, sin claves foráneas) | `ciudades`, `intereses` |
+
+- **Escrituras = procedimientos (`sp_*`)**, **consultas = funciones (`fn_*`)**, y triggers para fecha de actualización y auditoría.
+- **La aplicación no tiene permiso sobre ninguna tabla**: solo ejecuta rutinas, que son `SECURITY DEFINER` (se ejecutan como `otalink_migrator`).
+- **Reglas de negocio con números** (edad mínima 18, nombre de 2 a 40 caracteres, biografía de hasta 500, máximo 20 intereses) en `configuracion.parametros`, no dentro del código de cada rutina.
+- **Auditoría** (`log.auditoria`) por trigger, **omitiendo datos sensibles**: nunca se copian el hash de contraseña, los sellos de seguridad ni la fecha de nacimiento.
+- La hora de negocio es la de Colombia (`America/Bogota`); la mayoría de edad se calcula con ella, y quien nació un 29 de febrero cumple en años no bisiestos el 1 de marzo.
+
+## Estado
+
+Los scripts 0001 a 0009 están escritos y a la espera de revisión y ejecución. Ver la tabla de orden en el README de la carpeta.
+
+## Cómo llama el código a la base
+
+Solo `OtaLinkRutinas` (en `OtaLink.Domain`) sabe cómo se invoca cada rutina; los servicios llaman a sus métodos y nunca contienen SQL. EF Core mapea las entidades y lee los resultados de las funciones; `SaveChanges` está bloqueado. Ver [ARCHITECTURE.md](ARCHITECTURE.md).

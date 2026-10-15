@@ -1,3 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Reglas de negocio puras. NO depende de ningún otro proyecto ni de EF Core / ASP.NET. -->
+  <!--
+    Todo lo relacionado con la base de datos: entidades (una por tabla), DbContext y el archivo
+    que llama a los procedimientos y funciones. NO depende de ningún otro proyecto de OtaLink.
+    Las escrituras NO se hacen con EF: la transaccionalidad vive en la base (ver OtaLinkDbContext).
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- Parte relacional de EF: ToTable con esquema, FromSql (funciones) y SqlQuery. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <!-- Npgsql directo: para invocar los procedimientos almacenados y leer sus parámetros de salida. -->
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
 </Project>

@@ -1,13 +1,20 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace OtaLink.Application;
 
 public static class DependencyInjection
 {
-    /// <summary>Registra los servicios de la capa de aplicación (casos de uso, validadores).</summary>
+    /// <summary>
+    /// Registra lo propio de Application. Aquí solo hay DTOs e interfaces: las implementaciones
+    /// (servicios) las registra Infrastructure. Lo único compartido es el reloj, inyectable para pruebas.
+    /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // Los casos de uso se registran aquí, con su ciclo de vida explícito (normalmente Scoped).
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton(TimeProvider.System);
+
         return services;
     }
 }

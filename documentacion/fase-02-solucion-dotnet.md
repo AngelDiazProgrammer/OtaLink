@@ -1,8 +1,10 @@
 # Fase 2: solución .NET por capas
 
 > Corresponde a la "Fase 5" del plan original (crear la solución .NET).
-> Estado: **en curso**. Esta versión documenta la etapa 1 (esqueleto) y la etapa 2 (configuración, registros y conexión a la base real). Las siguientes etapas (modelo de datos, identidad, primer flujo vertical) se añadirán aquí.
-> Fecha de las etapas 1 y 2: 15 de octubre de 2026.
+> Estado: **en curso**. Etapa 1 (esqueleto), etapa 2 (configuración, registros y conexión a la base real) y **etapa 3: reorganización de la arquitectura** (la vigente).
+> Fecha: 15 de octubre de 2026.
+>
+> ⚠️ **La etapa 3 reemplaza parte del diseño de las etapas 1 y 2** (repositorios, `Contracts`, EF Core con migraciones, Minimal APIs). Esas secciones se conservan como historia y están marcadas **(superado)**. La arquitectura vigente está en [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) y en la sección 2.8.
 
 ## Índice
 
@@ -40,7 +42,7 @@ Detalle de capas y dependencias: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
 
 **Por qué `TreatWarningsAsErrors`:** una advertencia ignorada hoy es un fallo mañana. Con esta opción el código no compila hasta que se resuelve.
 
-### 2.2 Los proyectos
+### 2.2 Los proyectos (superado: ver 2.8)
 
 ```
 src/
@@ -123,7 +125,7 @@ Si la base falla, `/health/ready` responde `503` con el cuerpo `Unhealthy` y **n
 
 **Herramienta `dotnet-ef`.** Instalada como herramienta **local del repositorio** (`dotnet-tools.json`, versión fija 10.0.13), no global. Se usa para generar migraciones y scripts SQL; generar scripts **no se conecta a ninguna base**: el contexto de diseño (`DesignTimeDbContextFactory`) usa una cadena ficticia.
 
-### 2.6 Cómo se cambia la base de datos: scripts SQL que ejecuta una persona
+### 2.6 Cómo se cambia la base de datos: scripts SQL que ejecuta una persona (superado en parte: ver 2.8)
 
 Decisión del equipo: **ninguna migración se aplica automáticamente**. EF Core es la fuente de verdad del modelo, pero cada cambio se entrega como un script SQL numerado en [deploy/postgres/migrations/](../deploy/postgres/migrations/README.md), que se **lee y se ejecuta a mano** desde DBeaver como el rol `otalink_migrator`.
 
@@ -147,6 +149,60 @@ Procedimiento (todo en WINDOWS, PowerShell):
 `-ExecutionPolicy Bypass` solo afecta a ese proceso: no se cambia la política de seguridad de Windows. Se usa únicamente con scripts del propio repositorio que se pueden leer.
 
 **Resultado verificado:** `/health/ready` respondió `200 Healthy`: la API de Windows llegó, por el túnel, a la PostgreSQL de la VM con el rol limitado.
+
+---
+
+### 2.8 Etapa 3: reorganización de la arquitectura (vigente)
+
+**Qué pasó.** Al llegar al primer módulo de negocio (perfiles), el desarrollador aclaró cómo quería la arquitectura de **todo** el proyecto. El esqueleto de las etapas 1 y 2 (dominio rico, repositorios, EF Core con migraciones) no encajaba, y era el momento más barato para cambiarlo: no se había ejecutado ningún script de tablas ni se había construido ningún módulo encima.
+
+**Las reglas que dio:**
+
+1. Flujo: **controladores → interfaces → servicios** (y de vuelta en sentido contrario).
+2. **Sin repositorios.** Cada módulo tiene su servicio independiente, con las dependencias inyectadas directamente.
+3. **La transaccionalidad vive en la base de datos**: nada de SQL de negocio en el código, solo procedimientos, funciones y triggers. Los scripts los revisa y ejecuta el desarrollador.
+4. **Front:** solo `.razor` y `.razor.cs`; el `.cs` llama al controlador.
+5. Base de datos organizada por **esquemas**: `configuracion`, `proceso`, `log`, `seguridad` y `smart` (tablas fuertes, sin dependencias).
+
+**Cómo se mapearon a las capas que ya existían** (decisión del desarrollador: conservar las capas y solo reorganizar lo que contiene cada una):
+
+| Capa | Antes | Ahora |
+|---|---|---|
+| `Application` | Casos de uso, repositorios | **DTOs e interfaces** de servicio, validación primaria |
+| `Domain` | Reglas de negocio puras | **Todo lo de la base de datos**: entidades, `DbContext` y `OtaLinkRutinas` |
+| `Infrastructure` | EF Core, repositorios | **Servicios** (uno por módulo) |
+| `Api` | Minimal APIs | **Controllers** |
+| `Contracts` | DTOs | Eliminado (sus DTOs pasan a `Application`) |
+| `Web` | Referenciaba `Contracts` | Referencia `Application` (solo DTOs) |
+
+**Piezas nuevas importantes:**
+
+- **`OtaLinkRutinas`** (`Domain/Datos`): el **único** archivo que sabe cómo se invoca cada procedimiento o función. Los servicios llaman a sus métodos, sin SQL. Los procedimientos se invocan con `CALL`; las funciones, con una llamada de una línea que EF parametriza.
+- **`OtaLinkDbContext` con `SaveChanges` bloqueado**: EF modela las entidades y lee los resultados de las funciones, pero cualquier intento de escribir con EF lanza `NotSupportedException`, para que nadie se salte las reglas de la base.
+- **`SECURITY DEFINER`**: las rutinas se ejecutan con los permisos de su dueño, y la aplicación (`otalink_app`) **no tiene permiso sobre ninguna tabla**, solo `EXECUTE` sobre rutinas. Así no hay forma de saltarse una regla con un `SELECT` o un `INSERT` directo.
+- **Reglas con números en `configuracion.parametros`**: edad mínima, longitudes y máximo de intereses se leen de una tabla, no están fijas dentro de cada procedimiento.
+- **Auditoría por trigger** que omite datos sensibles (hash de contraseña, sellos de seguridad, fecha de nacimiento).
+- **Validación en dos niveles:** primaria en los DTOs (forma del dato y reglas evidentes, para no viajar a la base con datos mal diligenciados) y **autoritativa en el procedimiento** (la que no se puede saltar). Los límites existen en dos sitios y deben mantenerse iguales.
+
+**Qué se descartó y por qué:**
+
+| Descartado | Razón |
+|---|---|
+| EF Core para escribir y generar migraciones | La transacción debe vivir en la base y los scripts los escribe y revisa una persona |
+| Repositorios | Decisión explícita de arquitectura |
+| Proyecto `Contracts` | Sus DTOs viven ahora en `Application` |
+| `MapIdentityApi` (endpoints de Identity) | Se necesitan controladores; se usará `UserManager`/`SignInManager` con almacenes propios que llaman a procedimientos |
+| Pruebas unitarias del dominio con objetos ricos | Las reglas viven en la base; las pruebas pasan a ser de validación primaria (DTOs) y de arquitectura, y más adelante pruebas contra la base real |
+
+**Cómo se verificó:**
+
+- Compila con **0 advertencias y 0 errores**; **62 pruebas correctas**.
+- Una prueba comprueba, **sin base de datos**, que el modelo de EF coincide con los scripts: esquema, tabla y columnas de cada entidad (incluido el resultado de `fn_perfil_obtener`). Si un nombre cambia en un lado y no en el otro, falla.
+- Las reglas de arquitectura detectan una violación deliberada (el front referenciando `Domain`), que luego se revirtió.
+
+**Lección:** una instrucción de arquitectura dada a mitad de camino puede invalidar mucho código. Se resolvió **confirmando antes** cómo se había entendido, **respaldando** el estado anterior y **haciendo cumplir** las reglas nuevas con pruebas de arquitectura, de modo que no se puedan romper sin que fallen.
+
+**Estado de los scripts SQL:** los nueve scripts (0001 a 0009) están escritos y **a la espera de que el desarrollador los revise y ejecute**. Hasta entonces la base no tiene ninguna tabla de OtaLink.
 
 ---
 
@@ -270,9 +326,11 @@ Lección general: cuando "nada funciona", ejecutar la pieza más pequeña por se
 
 **Pendiente en esta fase:**
 
-- [ ] Modelo de datos y primer script de migración (identidad, perfiles, intereses)
-- [ ] Pruebas de integración contra la base real de la VM (una base `otalink_test` aparte, creada con un script SQL). Dependen de que la VM esté encendida y el túnel abierto
-- [ ] Primer flujo vertical: registro, verificación de correo, login, perfil e intereses
+- [ ] Revisar y ejecutar los scripts SQL 0001 a 0009 en la base (los ejecuta el desarrollador)
+- [ ] Servicios (`PerfilService`, `InteresService`, `CiudadService`) y sus controladores
+- [ ] Autenticación: `UserManager`/`SignInManager` con almacenes propios que llaman a los procedimientos de `seguridad` (envío de correo real pendiente de elegir proveedor)
+- [ ] Pruebas contra la base real de la VM (una base de pruebas aparte)
+- [ ] Páginas de Blazor (`.razor` + `.razor.cs`) para registro, perfil e intereses
 - [ ] Servicios `systemd` `otalink-api` y `otalink-web` y primer despliegue real en la VM
 - [ ] Replicar en la Web la política de cabeceras de proxy
 - [ ] Instalar y configurar MudBlazor en la Web

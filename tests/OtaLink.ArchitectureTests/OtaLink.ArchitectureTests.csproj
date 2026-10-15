@@ -12,7 +12,7 @@
     <ProjectReference Include="..\..\src\OtaLink.Domain\OtaLink.Domain.csproj" />
     <ProjectReference Include="..\..\src\OtaLink.Application\OtaLink.Application.csproj" />
     <ProjectReference Include="..\..\src\OtaLink.Infrastructure\OtaLink.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\src\OtaLink.Contracts\OtaLink.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\OtaLink.Api\OtaLink.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

@@ -20,6 +20,8 @@ builder.Host.UseSerilog((context, services, logger) => logger
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Controladores de API (solo JSON). Sin vistas: no se usa AddControllersWithViews.
+builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
@@ -52,6 +54,7 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
+app.MapControllers();
 app.MapHealthChecks("/health", new() { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
 

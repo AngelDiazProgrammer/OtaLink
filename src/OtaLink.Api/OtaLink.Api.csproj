@@ -1,22 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-  <!-- API REST con Minimal APIs. Es la raíz de composición: conoce todas las capas. -->
+  <!--
+    API REST con controladores (solo JSON, sin vistas). Los controladores conocen únicamente las
+    interfaces y los DTOs de Application. Infrastructure se referencia solo para registrar los
+    servicios (raíz de composición), no para usarlos directamente.
+  -->
   <PropertyGroup>
     <!-- Identificador de User Secrets: guarda la cadena de conexión de desarrollo FUERA del repositorio. -->
     <UserSecretsId>otalink-api-dev</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\OtaLink.Application\OtaLink.Application.csproj" />
-    <ProjectReference Include="..\OtaLink.Contracts\OtaLink.Contracts.csproj" />
     <ProjectReference Include="..\OtaLink.Infrastructure\OtaLink.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Scalar.AspNetCore" />
     <PackageReference Include="Serilog.AspNetCore" />
-    <!-- Solo para que "dotnet ef" funcione; no viaja con la aplicación publicada. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 </Project>

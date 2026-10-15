@@ -1,35 +1,51 @@
-# Scripts SQL de migración
+# Scripts SQL de la base de datos
 
-Cada cambio en el modelo de datos se entrega como un **script SQL numerado**. Los scripts se ejecutan **a mano y en orden**, desde DBeaver, conectado como el rol **`otalink_migrator`** a la base **`otalink_dev`**. Ninguna migración se aplica automáticamente.
+Toda la estructura y la lógica transaccional de OtaLink vive en la base de datos, y se entrega como **scripts SQL numerados, escritos a mano**. Ninguno se aplica automáticamente.
 
-## Por qué así
+## Reglas de trabajo
 
-- Cada cambio de esquema se puede **leer y revisar** antes de ejecutarse.
-- La API en ejecución usa `otalink_app`, que **no puede** alterar el esquema.
-- El mismo procedimiento sirve para producción (con copia de seguridad antes).
+1. **Cada script se revisa antes de ejecutarse.** Cada uno es pequeño y trae al inicio: qué hace, qué requiere y como qué rol se ejecuta.
+2. Se ejecutan **en orden numérico**, desde DBeaver, conectado como **`otalink_migrator`** a **`otalink_dev`**: `Archivo → Abrir archivo`, leer, y ejecutar como script completo con **`Alt + X`**.
+3. Cada script va dentro de `BEGIN; ... COMMIT;`: si algo falla, no se aplica nada a medias. Al final trae una consulta de **comprobación** (comentada) para ejecutar aparte.
+4. Antes de un cambio delicado, copia de seguridad: `sudo systemctl start otalink-db-backup.service` (en la VM).
+5. Para cambiar la base se crea un script **nuevo** con el siguiente número. Los scripts ya ejecutados no se editan.
 
-## Cómo se generan (lo hace el equipo de desarrollo)
+## Esquemas
 
-EF Core es la fuente de verdad del modelo. Para cada migración se genera el SQL con `dotnet ef`, que **no se conecta a ninguna base**:
+| Esquema | Para qué |
+|---|---|
+| `configuracion` | Parámetros del sistema (reglas de negocio configurables) |
+| `proceso` | Tablas transaccionales que dependen de otras (perfiles...) |
+| `log` | Auditoría y registros |
+| `seguridad` | Cuentas y datos de acceso |
+| `smart` | Tablas **fuertes**: no dependen de ninguna otra (catálogos) |
 
-```powershell
-dotnet ef migrations script <migracion-anterior> <migracion-nueva> --idempotent `
-  -p src\OtaLink.Infrastructure -s src\OtaLink.Api -o deploy\postgres\migrations\NNNN_nombre.sql
-```
+## Modelo de permisos
 
-`--idempotent` hace que el script compruebe en `__ef_migrations_history` qué ya se aplicó, así que ejecutarlo dos veces no duplica nada.
+La aplicación (`otalink_app`) **no tiene permiso sobre ninguna tabla**: solo puede ejecutar procedimientos y funciones, que se crean `SECURITY DEFINER` (se ejecutan con los permisos de `otalink_migrator`). Así la regla de negocio y la transacción no se pueden saltar con un `SELECT` o `INSERT` directo. Lo configura `0001`.
 
-## Cómo se ejecutan
+## Convenciones de rutinas
 
-1. Haz una copia de seguridad si el cambio es delicado: `sudo systemctl start otalink-db-backup.service` (en la VM).
-2. En DBeaver, conéctate como `otalink_migrator` a `otalink_dev`.
-3. Abre el script (`Archivo → Abrir archivo`), **léelo**, y ejecútalo como script completo (`Alt + X`).
-4. Comprueba el resultado con la consulta que acompaña a cada script.
-
-## Orden
-
-| Archivo | Contenido | Estado |
+| Prefijo | Tipo | Para qué |
 |---|---|---|
-| `NNNN_...sql` | (aún no hay migraciones: el modelo de datos llega en la siguiente etapa) | — |
+| `sp_` | Procedimiento | **Escribe** (transacción). Devuelve `p_codigo` (`'ok'` o un código de error estable) y `p_mensaje` |
+| `fn_` | Función | **Consulta** (no modifica) |
+| `tgf_` / `trg_` | Función de trigger / trigger | Fecha de actualización y auditoría automáticas |
 
-Los permisos para `otalink_app` sobre las tablas nuevas se conceden solos: `01-create-database.sql` configuró `ALTER DEFAULT PRIVILEGES` para los objetos que cree `otalink_migrator`.
+Todas llevan `SECURITY DEFINER` con `search_path` fijo y nombres calificados con su esquema.
+
+## Orden de ejecución
+
+| # | Archivo | Contenido | Estado |
+|---|---|---|---|
+| 0001 | `0001_esquemas_y_permisos.sql` | Los 5 esquemas y el modelo de permisos | Pendiente |
+| 0002 | `0002_configuracion.sql` | `configuracion.parametros` (reglas con números), `tgf_actualizar_fecha`, `fn_parametro_entero` | Pendiente |
+| 0003 | `0003_log_auditoria.sql` | `log.auditoria` y el trigger genérico `tgf_auditar` | Pendiente |
+| 0004 | `0004_smart_catalogos.sql` | `smart.ciudades`, `smart.intereses` y sus funciones de lectura | Pendiente |
+| 0005 | `0005_smart_datos_intereses_otaku.sql` | 172 intereses en 9 categorías (repetible: no duplica) | Pendiente |
+| 0006 | `0006_seguridad_usuarios.sql` | `seguridad.usuarios` y sus triggers | Pendiente |
+| 0007 | `0007_seguridad_usuarios_rutinas.sql` | `sp_usuario_crear/actualizar/eliminar` y `fn_usuario_por_*` | Pendiente |
+| 0008 | `0008_proceso_perfiles.sql` | `proceso.perfiles`, `proceso.perfiles_intereses` y sus triggers | Pendiente |
+| 0009 | `0009_proceso_perfiles_rutinas.sql` | Reglas de negocio de perfiles: `sp_perfil_*` y `fn_perfil_*` | Pendiente |
+
+Dependencias: `0003` y `0004` necesitan `0001`; `0006` necesita `0002` y `0003`; `0008` necesita `0004` y `0006`; `0009` necesita `0002`, `0007` y `0008`.

@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- EF Core, PostgreSQL, correo, almacenamiento. Implementa los puertos de Application. -->
+  <!--
+    Servicios (una carpeta por módulo, cada uno implementa la interfaz de Application) y el registro
+    de dependencias. Los servicios llaman a la base de datos solo a través de OtaLinkRutinas (Domain).
+  -->
   <ItemGroup>
     <ProjectReference Include="..\OtaLink.Application\OtaLink.Application.csproj" />
     <ProjectReference Include="..\OtaLink.Domain\OtaLink.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />

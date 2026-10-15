@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using OtaLink.Infrastructure.Persistence;
+using OtaLink.Domain.Datos;
 
 namespace OtaLink.Api.Health;
 

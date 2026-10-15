@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Casos de uso e interfaces (puertos). No depende de Infrastructure. -->
-  <ItemGroup>
-    <ProjectReference Include="..\OtaLink.Domain\OtaLink.Domain.csproj" />
-  </ItemGroup>
+  <!--
+    DTOs e interfaces de servicio, más la validación primaria de los datos de entrada.
+    NO depende de ningún otro proyecto de OtaLink (ni de Domain ni de Infrastructure).
+  -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>

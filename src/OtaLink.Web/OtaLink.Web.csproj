@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <!--
     Blazor Web App: interactividad global en modo Server; Static SSR solo en las páginas de autenticación.
-    Solo conoce OtaLink.Contracts. NO referencia Domain, Application ni Infrastructure:
+    Solo conoce OtaLink.Application (los DTOs). NO referencia Domain ni Infrastructure:
     todo acceso a datos pasa por la API mediante HTTP.
   -->
   <PropertyGroup>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\OtaLink.Contracts\OtaLink.Contracts.csproj" />
+    <ProjectReference Include="..\OtaLink.Application\OtaLink.Application.csproj" />
   </ItemGroup>
 </Project>
