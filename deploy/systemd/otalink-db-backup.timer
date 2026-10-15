@@ -1,0 +1,11 @@
+[Unit]
+Description=Copia de seguridad diaria de la base de OtaLink
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Si la VM estaba apagada a las 03:00, ejecuta la copia al encender.
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

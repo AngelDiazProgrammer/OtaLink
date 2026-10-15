@@ -34,6 +34,8 @@ Estado real del servidor de OtaLink. Solo se documenta lo que ya se hizo y se ve
 ## Checkpoints
 
 - `01-ubuntu-limpio`: Ubuntu recién instalado y actualizado.
+- `02-ssh-ufw`: SSH por llave y UFW activo.
+- `03-red-fija`: IP fija `192.168.50.10` (creado con la VM encendida; cuando haya datos en PostgreSQL, preferir VM apagada o checkpoints de tipo Producción).
   Un checkpoint no es una copia de seguridad: vive junto al disco de la VM.
 
 ## Configuración aplicada y verificada
@@ -50,12 +52,18 @@ Estado real del servidor de OtaLink. Solo se documenta lo que ya se hizo y se ve
 
 - Firewall UFW activo y habilitado en el arranque:
   - Entrante: denegado por defecto. Saliente: permitido.
-  - Única regla: `22/tcp LIMIT IN` (SSH con limitación de intentos), IPv4 e IPv6.
-  - La regla no se restringe por subred porque el Default Switch cambia de subred al reiniciar Windows; se restringirá en la Fase 3 con IP fija.
+  - Única regla: `22/tcp LIMIT IN` solo desde `192.168.50.0/24` (SSH con limitación de intentos).
+  - Primero se creó la regla restringida y después se borró la general, para no perder el acceso.
   - Verificado: nueva sesión SSH entra y hay salida a Internet (`ping ubuntu.com`).
   - Recuperación: desde la consola de Hyper-V, `sudo ufw disable`.
 
-## Pendiente
+## Red
 
-- IP estable (Fase 3) y restringir la regla de SSH a la subred fija.
+IP fija `192.168.50.10` en el switch `OtaLink-NAT`. Detalle en [NETWORK.md](NETWORK.md).
+
+## Decisiones
+
+- Cockpit: no instalado por ahora. Entra con la contraseña del usuario (contradice SSH solo con llave) y abre el puerto 9090. Reevaluar cuando haya servicios .NET; si se instala, solo accesible desde `192.168.50.0/24`, nunca por Internet.
+
+## Pendiente
 - Abrir 80/443 solo cuando exista Nginx.
