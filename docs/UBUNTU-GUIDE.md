@@ -61,9 +61,17 @@ Estado real del servidor de OtaLink. Solo se documenta lo que ya se hizo y se ve
 
 IP fija `192.168.50.10` en el switch `OtaLink-NAT`. Detalle en [NETWORK.md](NETWORK.md).
 
+## Servicios instalados y verificados
+
+- .NET: solo `aspnetcore-runtime-10.0` (10.0.12, repositorio de Ubuntu). El SDK queda en Windows; se publica allí y se copia con `scp`. Verificado con una app de prueba.
+- PostgreSQL 18.6: ver [DATABASE.md](DATABASE.md). Respaldos: [BACKUP-RESTORE.md](BACKUP-RESTORE.md).
+- Nginx 1.28.3 como proxy inverso (`deploy/nginx/`, aplicado con `deploy/scripts/apply-nginx.sh`, que valida y revierte si falla). Verificado con un backend de prueba y desde el navegador de Windows.
+- `curl` instalado con `apt`.
+
 ## Decisiones
 
 - Cockpit: no instalado por ahora. Entra con la contraseña del usuario (contradice SSH solo con llave) y abre el puerto 9090. Reevaluar cuando haya servicios .NET; si se instala, solo accesible desde `192.168.50.0/24`, nunca por Internet.
 
 ## Pendiente
-- Abrir 80/443 solo cuando exista Nginx.
+- Abrir 443 cuando haya dominio y certificado.
+- Servicios systemd de la API y la web (`otalink-api`, `otalink-web`).
