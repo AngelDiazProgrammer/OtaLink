@@ -1,12 +1,15 @@
 namespace OtaLink.Application.Common;
 
-/// <summary>Tipo de error: el controlador lo traduce a un código HTTP (400, 404, 409).</summary>
+/// <summary>Tipo de error: el controlador lo traduce a un código HTTP (400, 401, 403, 404, 409, 423).</summary>
 public enum ErrorType
 {
     None = 0,
     Validation = 1,
     NotFound = 2,
     Conflict = 3,
+    Unauthorized = 4,
+    Forbidden = 5,
+    Locked = 6,
 }
 
 /// <summary>

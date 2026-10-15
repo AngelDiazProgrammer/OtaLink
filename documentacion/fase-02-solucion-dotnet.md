@@ -1,7 +1,7 @@
 # Fase 2: solución .NET por capas
 
 > Corresponde a la "Fase 5" del plan original (crear la solución .NET).
-> Estado: **en curso**. Etapa 1 (esqueleto), etapa 2 (configuración, registros y conexión a la base real), **etapa 3: reorganización de la arquitectura** (la vigente) y **etapa 4: servicios, controladores y pruebas contra la base real**.
+> Estado: **en curso**. Etapa 1 (esqueleto), etapa 2 (configuración, registros y conexión a la base real), **etapa 3: reorganización de la arquitectura** (la vigente) **etapa 4: servicios, controladores y pruebas contra la base real** y **etapa 5: autenticación**.
 > Fecha: 15 de octubre de 2026.
 >
 > ⚠️ **La etapa 3 reemplaza parte del diseño de las etapas 1 y 2** (repositorios, `Contracts`, EF Core con migraciones, Minimal APIs). Esas secciones se conservan como historia y están marcadas **(superado)**. La arquitectura vigente está en [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) y en la sección 2.8.
@@ -244,7 +244,7 @@ Dos pruebas merecen mención:
 - Si no hay conexión, las pruebas se **omiten con el motivo** en lugar de fallar.
 - Cada prueba crea un usuario temporal (`prueba-…@otalink.test`) y lo **borra al terminar** (su perfil se borra en cascada). La auditoría de esos cambios queda en `log.auditoria`.
 
-**Resultado verificado:** **134 pruebas correctas** en toda la solución (84 de integración, de las cuales unas 60 usan la base real), 0 omitidas, 0 advertencias de compilación.
+**Resultado verificado:** **134 pruebas correctas** en toda la solución (84 de integración, de las cuales **72 usan la base real**: sin base disponible se omiten, y con ella pasan), 0 omitidas, 0 advertencias de compilación.
 
 **Qué demuestra esta etapa:** los nueve scripts, escritos sin poder ejecutarlos, **funcionaron a la primera** al ejecutarlos el desarrollador; y cada afirmación de seguridad del diseño (la app no toca tablas, las reglas viven en la base, la persona se identifica por la sesión) tiene una prueba que falla si deja de cumplirse.
 
@@ -256,6 +256,67 @@ Dos pruebas merecen mención:
 | `ToTable`, `FromSql` y `SqlQuery` "no existían" en `Domain` | Pertenecen a `Microsoft.EntityFrameworkCore.Relational`, y solo estaba el núcleo de EF | Añadir el paquete relacional |
 | `CA1725`: el nombre del parámetro de `OnModelCreating` | Cada clase base usa un nombre distinto (`modelBuilder` en `DbContext`, `builder` en `IdentityDbContext`) | Seguir el nombre de la base que se hereda |
 | Un comando de shell con un bloque muy largo falló por las comillas | Los bloques enormes con comillas mezcladas se rompen | Escribir los archivos con la herramienta de archivos, no con un solo comando |
+| Un control de las pruebas dio 84 correctas aun apuntando a una base inexistente | El control estaba mal hecho: la fábrica de pruebas carga los User Secrets al final y pisaban la variable de entorno usada | Un control que no cambia nada no prueba nada. Se añadió OTALINK_TEST_CONNECTION (tiene prioridad sobre los secretos): con una base inexistente, 72 pruebas se omiten; con la real, pasan |
+| Una consulta de verificación de la auditoría mostró datos_despues nulo | La consulta (ORDER BY id DESC LIMIT 1) devolvía el último evento, que es el DELETE de la limpieza de la prueba; en un DELETE el dato nuevo es nulo por diseño | Las consultas de verificación deben filtrar por operación (INSERT/UPDATE/DELETE) |
+
+### 2.10 Etapa 5: autenticación
+
+**Objetivo:** que se pueda crear una cuenta, confirmar el correo, iniciar sesión y recuperar la contraseña, con la seguridad de Microsoft (Identity) pero **respetando la arquitectura**: los datos viven en la base y se tocan solo con procedimientos.
+
+**Cómo se resolvió el choque entre Identity y la arquitectura.** ASP.NET Core Identity está pensado para guardar sus datos con EF Core. Aquí se mantiene toda la lógica de seguridad de Microsoft (`UserManager`, `SignInManager`: hash de contraseñas, bloqueo, tokens) y se reemplaza solo **dónde se guardan los datos**, con un **almacén propio** (`UsuarioStore`, en `Infrastructure/Identity`) que implementa cinco interfaces de Identity (usuarios, contraseña, correo, sello de seguridad y bloqueo) y llama a los procedimientos `seguridad.sp_usuario_*` y funciones `fn_usuario_por_*` a través de `OtaLinkRutinas`. No hay SQL en el almacén.
+
+**Flujo y capas:**
+
+```
+AutenticacionController ──► IAutenticacionService ──► AutenticacionService ──► UserManager/SignInManager
+   (Api)                      (Application)            (Infrastructure)              │
+                                                                                      ▼
+                                                              UsuarioStore ──► OtaLinkRutinas ──► sp_usuario_* (base)
+```
+
+El servicio devuelve la **identidad** de la persona (`ClaimsPrincipal`, un tipo de .NET) y el controlador emite los tokens con `SignIn(...)` del esquema de portador de ASP.NET Core. Así el controlador no conoce Identity ni la base de datos: la regla de arquitectura se sigue cumpliendo.
+
+**Endpoints** (`/api/autenticacion/...`, públicos y con límite de peticiones; contrato en [docs/API-SPEC.md](../docs/API-SPEC.md)): `registro`, `confirmar-correo`, `reenviar-confirmacion`, `iniciar-sesion`, `refrescar`, `olvide-contrasena` y `restablecer-contrasena`.
+
+**Decisiones de seguridad** (todas con prueba; el detalle está en [docs/SECURITY.md](../docs/SECURITY.md)):
+
+| Decisión | Por qué |
+|---|---|
+| Registro, reenvío y "olvidé mi contraseña" responden **idéntico** exista o no el correo | Para que nadie averigüe qué correos tienen cuenta |
+| Un correo inexistente y una contraseña incorrecta dan la **misma respuesta**, y se calcula un hash de relleno | Misma razón, incluido el tiempo de respuesta |
+| La contraseña se comprueba **antes** de decir que falta confirmar el correo | Solo quien la conoce lo descubre |
+| Contraseña de mínimo 10 caracteres, sin exigir símbolos | La longitud protege más que la complejidad (NIST) |
+| 5 fallos bloquean la cuenta 15 minutos | Frena la adivinanza de contraseñas |
+| Enlaces de un solo uso ligados al sello de seguridad | Cambiar la contraseña invalida enlaces y sesiones anteriores |
+| 20 peticiones por minuto por IP en estos endpoints | Frena fuerza bruta y spam |
+
+**El correo:** de momento solo existe el modo de desarrollo (`Correo:Modo = Registro`), que escribe el enlace en el registro de la API para poder copiarlo. Si el modo no está configurado, el envío **falla de forma explícita**, en lugar de registrar códigos secretos en producción o fingir que envió algo. El envío real por SMTP queda para cuando se elija proveedor (se evaluará la cuenta de Gmail dedicada a la app).
+
+**Pruebas (24 contra la base real, con tokens de verdad):** el correo no se envía, una bandeja en memoria lo captura y la prueba lee el enlace como lo haría una persona. Cubren, entre otras cosas:
+
+- el flujo completo: registrar → confirmar → iniciar sesión → usar el token en un endpoint protegido; y que un token inventado no abre nada;
+- que la contraseña se guarda con hash (formato `AQAAAA…`) y nunca en claro;
+- la **anti-enumeración**: respuestas idénticas para correos nuevos, existentes e inexistentes;
+- el **bloqueo** al quinto intento, incluso con la contraseña correcta, y el reinicio del contador tras un inicio correcto;
+- la **recuperación de contraseña**: el enlace sirve una sola vez, la contraseña vieja deja de servir, y el token de refresco de la sesión anterior queda invalidado;
+- que el código de recuperación **de una cuenta no sirve para otra**;
+- el límite de peticiones (`429`).
+
+**Verificación de que las pruebas son de fiar:** con la base inexistente, esas pruebas se **omiten** (96 en total entre toda la suite); y al debilitar a propósito el bloqueo (de 5 a 50 intentos) **falla** la prueba de bloqueo.
+
+**Resultado:** **158 pruebas correctas**, 0 omitidas, 0 advertencias de compilación.
+
+**Lecciones:**
+
+| Síntoma | Causa | Lección |
+|---|---|---|
+| `NU1510`: .NET pedía quitar cuatro paquetes | Al referenciar el marco compartido de ASP.NET Core (necesario para `SignInManager`), esos paquetes ya vienen incluidos | No referenciar aparte lo que el marco ya trae |
+| Una prueba falló con "Cannot access a closed Stream" | Mi prueba leía dos veces el cuerpo de la misma respuesta | Leer cada cuerpo HTTP una sola vez; era un defecto de la prueba, no de la aplicación |
+| El analizador pedía `[^1]` en vez de `.Last()` y `static` en ayudas sin estado | Reglas CA1826 y CA1822 | Cumplirlas; son mejoras baratas |
+
+**Pendiente de esta etapa** (detalle en [docs/SECURITY.md](../docs/SECURITY.md), sección 8): llaves de Data Protection persistentes para el servidor, envío real de correo, HTTPS, y la cookie de sesión de la Web.
+
+---
 
 ---
 
@@ -380,7 +441,7 @@ Lección general: cuando "nada funciona", ejecutar la pieza más pequeña por se
 
 **Pendiente en esta fase:**
 
-- [ ] **Autenticación:** `UserManager`/`SignInManager` con almacenes propios que llaman a los procedimientos de `seguridad` (registro, confirmación de correo, inicio de sesión, refresco, recuperación de contraseña). El envío real de correo queda pendiente de elegir proveedor
+- [ ] **Envío real de correo (SMTP)**, llaves de Data Protection persistentes y HTTPS (ver docs/SECURITY.md)
 - [ ] Páginas de Blazor (`.razor` + `.razor.cs`) para registro, perfil e intereses
 - [ ] Servicios `systemd` `otalink-api` y `otalink-web` y primer despliegue real en la VM
 - [ ] Replicar en la Web la política de cabeceras de proxy

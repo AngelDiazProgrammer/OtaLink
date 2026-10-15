@@ -32,6 +32,9 @@ public abstract class OtaLinkControllerBase : ControllerBase
         {
             ErrorType.NotFound => StatusCodes.Status404NotFound,
             ErrorType.Conflict => StatusCodes.Status409Conflict,
+            ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
+            ErrorType.Forbidden => StatusCodes.Status403Forbidden,
+            ErrorType.Locked => StatusCodes.Status423Locked,
             _ => StatusCodes.Status400BadRequest,
         };
 

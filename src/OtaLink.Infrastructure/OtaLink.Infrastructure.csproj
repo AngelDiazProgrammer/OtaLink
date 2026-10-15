@@ -8,11 +8,15 @@
     <ProjectReference Include="..\OtaLink.Domain\OtaLink.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!--
+      ASP.NET Core Identity (UserManager, SignInManager) y los tokens de portador viven en el marco
+      compartido de ASP.NET Core, no en un paquete. Ese marco ya incluye la inyección de dependencias,
+      la configuración, las opciones y el registro, así que no se referencian aparte.
+    -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="EFCore.NamingConventions" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
   </ItemGroup>
 </Project>
