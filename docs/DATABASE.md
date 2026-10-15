@@ -46,3 +46,14 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 \
 - Modelo de datos (tablas) con las migraciones de EF Core.
 - Copias de seguridad y restauración probada.
 - Base de producción separada de `otalink_dev`.
+
+## Desarrollo desde Windows (2026-10-15)
+
+- La API de desarrollo se conecta a `otalink_dev` con el rol `otalink_app` por un túnel SSH: `localhost:15432` (Windows) → `127.0.0.1:5432` (VM). El puerto 5432 sigue cerrado en UFW.
+- La cadena de conexión vive en User Secrets (`Database:ConnectionString`), nunca en Git. En el servidor será la variable de entorno `Database__ConnectionString`.
+- Scripts: `deploy/scripts/dev-db-tunnel.ps1` y `deploy/scripts/dev-set-db-secret.ps1` (este valida el formato de la contraseña).
+- Verificado: `GET /health/ready` → `200 Healthy`.
+
+## Cambios de esquema
+
+Cada migración de EF Core se entrega como un script SQL numerado en `deploy/postgres/migrations/` (ver su README). Se ejecutan a mano desde DBeaver como `otalink_migrator`. Convención de nombres: `snake_case`; historial en `__ef_migrations_history`.

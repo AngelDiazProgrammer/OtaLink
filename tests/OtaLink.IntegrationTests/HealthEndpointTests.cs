@@ -1,12 +1,11 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace OtaLink.IntegrationTests;
 
-public class HealthEndpointTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class HealthEndpointTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     [Fact]
-    public async Task Health_responde_200_y_Healthy()
+    public async Task Health_responde_200_y_Healthy_sin_consultar_la_base()
     {
         using var client = factory.CreateClient();
 
@@ -18,7 +17,21 @@ public class HealthEndpointTests(WebApplicationFactory<Program> factory) : IClas
     }
 
     [Fact]
-    public async Task Ruta_inexistente_responde_404_sin_filtrar_detalles()
+    public async Task Health_ready_responde_503_sin_base_de_datos_y_no_filtra_detalles()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("Unhealthy", body);
+        Assert.DoesNotContain("127.0.0.1", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("prueba", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Ruta_inexistente_responde_404()
     {
         using var client = factory.CreateClient();
 

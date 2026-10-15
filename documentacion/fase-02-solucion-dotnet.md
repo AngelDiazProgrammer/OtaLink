@@ -1,8 +1,8 @@
 # Fase 2: solución .NET por capas
 
 > Corresponde a la "Fase 5" del plan original (crear la solución .NET).
-> Estado: **en curso**. Esta versión documenta la etapa 1, el esqueleto. Las siguientes etapas (base de datos con EF Core, identidad, primer flujo vertical) se añadirán aquí.
-> Fecha de la etapa 1: 15 de octubre de 2026.
+> Estado: **en curso**. Esta versión documenta la etapa 1 (esqueleto) y la etapa 2 (configuración, registros y conexión a la base real). Las siguientes etapas (modelo de datos, identidad, primer flujo vertical) se añadirán aquí.
+> Fecha de las etapas 1 y 2: 15 de octubre de 2026.
 
 ## Índice
 
@@ -87,6 +87,69 @@ Qué hay hoy dentro de cada uno (es deliberadamente poco):
 
 ---
 
+### 2.5 Etapa 2: configuración, registros y conexión a la base real
+
+**Objetivo:** que la API tenga configuración tipada y validada, registros estructurados, un `DbContext` de EF Core y una conexión comprobada con la PostgreSQL de la VM, **sin guardar nunca una contraseña en Git**.
+
+**Configuración tipada.** `DatabaseOptions` (sección `Database`, clave `ConnectionString`) se enlaza con el patrón `IOptions` y se valida al arrancar (`ValidateOnStart`). Si falta la cadena de conexión, **la API se niega a arrancar** con el mensaje `Falta la configuración 'Database:ConnectionString'`, en vez de fallar en la primera consulta. Se comprobó ejecutándola sin configuración.
+
+**De dónde sale la cadena de conexión:**
+
+| Entorno | Fuente | En Git |
+|---|---|---|
+| Desarrollo (Windows) | *User Secrets* (`%APPDATA%\Microsoft\UserSecrets\otalink-api-dev`) | No |
+| Servidor (VM) | Variable de entorno `Database__ConnectionString` (se definirá en el servicio `systemd`) | No |
+| Pruebas | Valor ficticio inyectado por la prueba | Sí, no es real |
+
+`appsettings.json` solo contiene la clave vacía como documentación.
+
+**Registros estructurados (Serilog).** Configurados en `appsettings.json` (sección `Serilog`): nivel `Information`, con `Warning` para ASP.NET Core, EF Core y System. Salida por consola: en el servidor la recoge `systemd` y se lee con `journalctl`. El log de cada petición lo hace `UseSerilogRequestLogging`. EF Core **no** registra valores de parámetros (el registro de datos sensibles está desactivado por defecto), y no se registran cuerpos de petición ni cabeceras.
+
+**`DbContext`.** `OtaLinkDbContext` (en `Infrastructure/Persistence`) se registra con `AddDbContext`, que lo deja **Scoped**: una instancia por petición, nunca Singleton. Usa:
+
+- Npgsql como proveedor de PostgreSQL.
+- Convención `snake_case` (`EFCore.NamingConventions`): las tablas y columnas se llamarán `usuarios`, `fecha_creacion`, y se consultan sin comillas en DBeaver.
+- Historial de migraciones en la tabla `__ef_migrations_history`.
+- `ApplyConfigurationsFromAssembly`: cada entidad se configura en su propia clase, descubierta automáticamente. Hoy no hay ninguna y por eso aparece la advertencia `No instantiatable types implementing IEntityTypeConfiguration` (inofensiva; desaparece con la primera entidad).
+
+**Salud.** Dos *endpoints* distintos:
+
+| Ruta | Qué comprueba | Para qué |
+|---|---|---|
+| `/health` | Que la aplicación está viva (no consulta nada externo) | Saber si el proceso responde |
+| `/health/ready` | Además, que la base de datos responde (abre una conexión real) | Saber si puede atender peticiones |
+
+Si la base falla, `/health/ready` responde `503` con el cuerpo `Unhealthy` y **nada más**. La causa real (con el código de error de Npgsql) queda solo en el registro del servidor. Hay una prueba automática que verifica que el cuerpo no filtra el host ni el nombre de usuario.
+
+**Herramienta `dotnet-ef`.** Instalada como herramienta **local del repositorio** (`dotnet-tools.json`, versión fija 10.0.13), no global. Se usa para generar migraciones y scripts SQL; generar scripts **no se conecta a ninguna base**: el contexto de diseño (`DesignTimeDbContextFactory`) usa una cadena ficticia.
+
+### 2.6 Cómo se cambia la base de datos: scripts SQL que ejecuta una persona
+
+Decisión del equipo: **ninguna migración se aplica automáticamente**. EF Core es la fuente de verdad del modelo, pero cada cambio se entrega como un script SQL numerado en [deploy/postgres/migrations/](../deploy/postgres/migrations/README.md), que se **lee y se ejecuta a mano** desde DBeaver como el rol `otalink_migrator`.
+
+Ventajas: cada cambio de esquema se revisa antes de ejecutarse; la API (rol `otalink_app`) no puede alterar el esquema; el mismo procedimiento sirve para producción, con copia de seguridad previa.
+
+### 2.7 Desarrollar contra la base real de la VM
+
+La base de datos de la VM solo escucha en `127.0.0.1:5432`. Para que la API que corre en Windows la use, hay un **túnel SSH** que conecta un puerto local con ese puerto interno, sin abrir nada en el firewall.
+
+```
+API en Windows ──► localhost:15432 ══(túnel SSH)══► 127.0.0.1:5432 en la VM (PostgreSQL)
+```
+
+Procedimiento (todo en WINDOWS, PowerShell):
+
+1. **Túnel** (ventana que se queda abierta): `powershell -ExecutionPolicy Bypass -File deploy\scripts\dev-db-tunnel.ps1`
+2. **Secreto** (una sola vez): copiar la contraseña de `otalink_app` desde la VM (`sudo less /etc/otalink/db-app-password`, doble clic sobre la palabra, `q` para salir) y ejecutar `powershell -ExecutionPolicy Bypass -File deploy\scripts\dev-set-db-secret.ps1`. El script la pide sin mostrarla y **rechaza valores con formato incorrecto**.
+3. **API:** `dotnet run --project src\OtaLink.Api --launch-profile http -c Release`
+4. **Comprobar:** `curl.exe -s -i http://127.0.0.1:5100/health/ready` → `200 Healthy`.
+
+`-ExecutionPolicy Bypass` solo afecta a ese proceso: no se cambia la política de seguridad de Windows. Se usa únicamente con scripts del propio repositorio que se pueden leer.
+
+**Resultado verificado:** `/health/ready` respondió `200 Healthy`: la API de Windows llegó, por el túnel, a la PostgreSQL de la VM con el rol limitado.
+
+---
+
 ## 3. Decisión: modo de renderizado de Blazor
 
 **Interactive Server global + Static SSR únicamente en las páginas de autenticación.**
@@ -162,6 +225,12 @@ Resultado actual: **12 pruebas, todas correctas**, **0 advertencias, 0 errores**
 | 4 | `dotnet test` decía "Testing with VSTest target is no longer supported..." | En .NET 10 `dotnet test` ya no usa el motor antiguo (VSTest) con xUnit v3 | Activar en `global.json`: `"test": { "runner": "Microsoft.Testing.Platform" }` |
 | 5 | "No se ejecutaron pruebas" (código 5) con las pruebas bien escritas | Varias causas encadenadas, ver abajo | Probar el ejecutable directamente para separar "las pruebas fallan" de "el puente falla" |
 | 6 | Tildes dañadas (`aÃ±adir`) en archivos reescritos | PowerShell 5.1 lee/escribe sin UTF-8 por defecto | Reescribir con la herramienta de archivos, o indicar `-Encoding UTF8` en lectura y escritura |
+| 7 | `la ejecución de scripts está deshabilitada en este sistema` | Política de ejecución de PowerShell | No cambiar la política del sistema; usar `-ExecutionPolicy Bypass` solo para ese proceso y solo con scripts propios |
+| 8 | `El argumento ... para el parámetro -File no existe` | PowerShell estaba en `C:\WINDOWS\system32`, y la ruta del script era relativa al repositorio | Hacer `cd` al repositorio antes, o usar la ruta completa |
+| 9 | `/health/ready` daba `503` y el registro solo decía "No se pudo conectar" | `CanConnectAsync` de EF **oculta la excepción** y devuelve `false` | Abrir la conexión de verdad (`OpenConnectionAsync`) para que el error real llegue al log del servidor |
+| 10 | `Format of the initialization string does not conform to specification starting at index 68` | La contraseña guardada en los secretos tenía un formato inválido (el pegado trajo caracteres de más o quedó incompleto) | El script de secretos ahora valida el formato y rechaza valores incorrectos. Contar posiciones ayuda: el índice 68 era justo el inicio de `Password=` |
+| 11 | `dotnet build` fallaba con `MSB3026` (no se puede copiar `OtaLink.Api.exe`) | La API seguía ejecutándose y Windows bloquea su `.exe` | Detener la API (`Ctrl+C`) antes de recompilar |
+| 12 | Advertencia `MSB3277`: dos versiones de `EntityFrameworkCore.Relational` (10.0.4 y 10.0.13) | Npgsql exige ≥ 10.0.4 y las herramientas de diseño traen 10.0.13 | `CentralPackageTransitivePinningEnabled` y fijar la versión en `Directory.Packages.props` |
 
 ### Detalle del problema 5 (el más largo)
 
@@ -188,11 +257,21 @@ Lección general: cuando "nada funciona", ejecutar la pieza más pequeña por se
 - [x] Versiones de paquetes verificadas y centralizadas
 - [x] Compila sin advertencias; 12 pruebas correctas
 
+**Hecho en la etapa 2:**
+
+- [x] Configuración tipada con validación al arrancar (la API no inicia sin cadena de conexión)
+- [x] Registros estructurados con Serilog
+- [x] `OtaLinkDbContext` (Scoped) con Npgsql y `snake_case`
+- [x] `dotnet-ef` como herramienta local, con scripts SQL numerados ejecutados a mano
+- [x] `/health` y `/health/ready`; conexión real comprobada a la PostgreSQL de la VM por túnel SSH
+- [x] 13 pruebas correctas, 0 advertencias
+
+**Decisión tomada:** sin Docker; la base real es la de la VM. Los scripts SQL los ejecuta una persona desde DBeaver.
+
 **Pendiente en esta fase:**
 
-- [ ] Configuración tipada (`IOptions`) y logging estructurado (Serilog)
-- [ ] EF Core + PostgreSQL: `DbContext`, migraciones (aplicadas manualmente con el rol `otalink_migrator`)
-- [ ] Pruebas de integración contra una base real. **Decisión pendiente:** Testcontainers necesita Docker, que no se instaló a propósito; hay que elegir otra vía (por ejemplo, la PostgreSQL de la VM por el túnel SSH, o una instalación local)
+- [ ] Modelo de datos y primer script de migración (identidad, perfiles, intereses)
+- [ ] Pruebas de integración contra la base real de la VM (una base `otalink_test` aparte, creada con un script SQL). Dependen de que la VM esté encendida y el túnel abierto
 - [ ] Primer flujo vertical: registro, verificación de correo, login, perfil e intereses
 - [ ] Servicios `systemd` `otalink-api` y `otalink-web` y primer despliegue real en la VM
 - [ ] Replicar en la Web la política de cabeceras de proxy
